@@ -1,0 +1,29 @@
+[package]
+name = "lambda_cntr"
+version = "0.1.0"
+authors = ["Eduard von Briesen <e.v.briesen@gmail.com>"]
+description = "A container debugging tool for Kubernetes."
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1.9.0", features = ["full"] }
+futures = "0.3.16"
+kube = { version = "^0.59.0", default-features = true, features = ["admission","client","ws"] }
+k8s-openapi = { version = "0.13.0", default-features = false, features = ["v1_20"] }
+serde_yaml = "0.8.17"
+clap = "2.33.3"
+argparse = "0.2.2"
+log = "0.4.11"
+anyhow = "1.0.42"
+env_logger = "0.9.0"
+
+
+[[bin]]
+name = "lambda-cntr"
+path = "src/bin/main.rs"
+
+[[example]]
+name = "pod_shell"
+path = "src/pod_shell.rs"
