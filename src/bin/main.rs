@@ -5,28 +5,33 @@ extern crate clap;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
-
-
 fn deploy(args: &ArgMatches) {
-    lambda_cntr::pod_shell::main().expect("Failed to deploy cntr-pod");
+    let container_id = args.value_of("id").unwrap().to_string();
+    lambda_cntr::pod_shell::deploy_and_attach(container_id);
 }
 
 fn main() {
-    let deploy_command = SubCommand::with_name("deploy")
-        .about("Deploy Cntr-Pod to Kubeneretes")
+    let attach_command = SubCommand::with_name("attach")
+        .about("Attach Cntr-Pod to Container in Kubeneretes")
         .version(crate_version!())
-        .author(crate_authors!("\n"));
+        .author(crate_authors!("\n"))
+        .arg(
+            Arg::with_name("id")
+                .help("container id")
+                .required(true)
+                .index(1),
+        );
 
     let matches = App::new("\u{03bb}-Cntr")
         .version(crate_version!())
         .author(crate_authors!("\n"))
         .about(crate_description!())
         .setting(AppSettings::SubcommandRequiredElseHelp)
-        .subcommand(deploy_command)
+        .subcommand(attach_command)
         .get_matches();
 
     match matches.subcommand() {
-        ("deploy", Some(deploy_matches)) => deploy(deploy_matches),
+        ("attach", Some(attach_matches)) => deploy(attach_matches),
         ("", None) => unreachable!(),
         _ => unreachable!(),
     };

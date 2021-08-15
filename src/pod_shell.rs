@@ -1,18 +1,38 @@
-
-use log::{info};
 use futures::{StreamExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Pod;
+use log::info;
 
 use kube::{
     api::{Api, AttachParams, DeleteParams, ListParams, PostParams, ResourceExt, WatchEvent},
     Client,
 };
-
 use std::fs::File;
 use std::io::BufReader;
+use tokio::io::AsyncWriteExt;
 
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
+    let pod: Api<Pod> = deploy().await?;
+
+    let pod: Api<Pod> = enter(pod).await?;
+
+    delete(pod).await?;
+
+    Ok(())
+}
+
+#[tokio::main]
+pub async fn deploy_and_attach(id: String) -> anyhow::Result<()> {
+    let pod: Api<Pod> = deploy().await?;
+
+    let pod: Api<Pod> = attach(pod, id).await?;
+
+    delete(pod).await?;
+
+    Ok(())
+}
+
+async fn deploy() -> anyhow::Result<Api<Pod>> {
     std::env::set_var("RUST_LOG", "info,kube=debug");
     env_logger::init();
     let client = Client::try_default().await?;
@@ -27,7 +47,9 @@ pub async fn main() -> anyhow::Result<()> {
     pods.create(&PostParams::default(), &pod).await?;
 
     // Wait until the pod is running, otherwise we get 500 error.
-    let lp = ListParams::default().fields("metadata.name=cntr").timeout(10);
+    let lp = ListParams::default()
+        .fields("metadata.name=cntr")
+        .timeout(10);
     let mut stream = pods.watch(&lp, "0").await?.boxed();
     while let Some(status) = stream.try_next().await? {
         match status {
@@ -44,7 +66,10 @@ pub async fn main() -> anyhow::Result<()> {
             _ => {}
         }
     }
+    Ok(pods)
+}
 
+async fn enter(pods: Api<Pod>) -> anyhow::Result<Api<Pod>> {
     // Do an interactive exec to a blog pod with the `sh` command
     let ap = AttachParams::interactive_tty();
     let mut attached = pods.exec("cntr", vec!["/bin/bash"], &ap).await?;
@@ -59,16 +84,64 @@ pub async fn main() -> anyhow::Result<()> {
     let mut stdout = tokio::io::stdout();
     // pipe current stdin to the stdin writer from ws
     tokio::spawn(async move {
-        tokio::io::copy(&mut stdin, &mut stdin_writer).await.unwrap();
+        tokio::io::copy(&mut stdin, &mut stdin_writer)
+            .await
+            .unwrap();
     });
     // pipe stdout from ws to current stdout
     tokio::spawn(async move {
-        tokio::io::copy(&mut stdout_reader, &mut stdout).await.unwrap();
+        tokio::io::copy(&mut stdout_reader, &mut stdout)
+            .await
+            .unwrap();
     });
+
     // When done, type `exit\n` to end it, so the pod is deleted.
     let status = attached.await;
     println!("{:?}", status);
 
+    Ok(pods)
+}
+
+async fn attach(pods: Api<Pod>, id: String) -> anyhow::Result<Api<Pod>> {
+    // Do an interactive exec to a blog pod with the `sh` command
+    let ap = AttachParams::interactive_tty();
+    let mut attached = pods.exec("cntr", vec!["/bin/bash"], &ap).await?;
+
+    // The received streams from `AttachedProcess`
+    let mut stdin_writer = attached.stdin().unwrap();
+    let mut stdout_reader = attached.stdout().unwrap();
+
+    let mut s = String::new();
+    s.push_str("cntr attach ");
+    s.push_str(&id);
+    s.push_str("\n");
+    stdin_writer.write(s.as_bytes()).await?;
+
+    // > For interactive uses, it is recommended to spawn a thread dedicated to user input and use blocking IO directly in that thread.
+    // > https://docs.rs/tokio/0.2.24/tokio/io/fn.stdin.html
+    let mut stdin = tokio::io::stdin();
+    let mut stdout = tokio::io::stdout();
+    // pipe current stdin to the stdin writer from ws
+    tokio::spawn(async move {
+        tokio::io::copy(&mut stdin, &mut stdin_writer)
+            .await
+            .unwrap();
+    });
+    // pipe stdout from ws to current stdout
+    tokio::spawn(async move {
+        tokio::io::copy(&mut stdout_reader, &mut stdout)
+            .await
+            .unwrap();
+    });
+
+    // When done, type `exit\n` to end it, so the pod is deleted.
+    let status = attached.await;
+    println!("{:?}", status);
+
+    Ok(pods)
+}
+
+async fn delete(pods: Api<Pod>) -> anyhow::Result<()> {
     // Delete it
     println!("deleting");
     pods.delete("cntr", &DeleteParams::default())
