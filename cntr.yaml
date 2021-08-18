@@ -10,7 +10,7 @@ spec:
       imagePullPolicy: Always
       command:
         - "sleep"
-        - "604800"
+        - "3600"
       securityContext:
         privileged: true
         runAsUser: 0
