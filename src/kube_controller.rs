@@ -1,6 +1,6 @@
 use futures::{StreamExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Pod;
-use log::info;
+use log::{error, info, warn};
 use std::collections::HashMap;
 
 use kube::{
@@ -11,37 +11,35 @@ use std::fs::File;
 use std::io::BufReader;
 use tokio::io::AsyncWriteExt;
 
-fn main() {
-}
+fn main() {}
 
 #[tokio::main]
 pub async fn deploy_and_attach(container_id: String, namespace: String) -> anyhow::Result<()> {
-    
     std::env::set_var("RUST_LOG", "info,kube=debug");
     env_logger::init();
     let client = Client::try_default().await?;
-    
-    let pods: Api<Pod> = deploy(client, namespace).await?;
-    
+    let pods: Api<Pod> = Api::namespaced(client, &namespace);
+
     let map = get_container_id(pods.clone()).await?;
-    for (key, value) in &map {
-        println!("{}: {}", key, value);
+
+    if !map.contains_key(&container_id) {
+        error!(
+            "No pod \"{}\" found in namespace \"{}\"!",
+            container_id,
+            namespace.clone()
+        );
+    } else {
+        if let Some(id) = map.get(&container_id) {
+            deploy(&pods).await?;
+            attach(&pods, id.to_string()).await?;
+            delete(&pods).await?;
+        }
     }
-
-    if let Some(id) = map.get(&container_id){
-        let container_id = id;
-    } 
-
-    let pods: Api<Pod> = attach(pods, container_id.to_string()).await?;
-
-    delete(pods).await?;
 
     Ok(())
 }
 
-async fn deploy(client: Client, namespace: String) -> anyhow::Result<Api<Pod>> {
-    let pods: Api<Pod> = Api::namespaced(client, &namespace);
-
+async fn deploy(pods: &Api<Pod>) -> anyhow::Result<()> {
     let file = File::open("./cntr.yaml").expect("Unable to open file");
     let reader = BufReader::new(file);
     let pod = serde_yaml::from_reader(reader).expect("Unable to parse file");
@@ -57,55 +55,22 @@ async fn deploy(client: Client, namespace: String) -> anyhow::Result<Api<Pod>> {
     while let Some(status) = stream.try_next().await? {
         match status {
             WatchEvent::Added(o) => {
-                info!("Added {}", o.name());
+                info!("Added Cntr-Pod");
             }
             WatchEvent::Modified(o) => {
                 let s = o.status.as_ref().expect("status exists on pod");
                 if s.phase.clone().unwrap_or_default() == "Running" {
-                    info!("Ready to attach to {}", o.name());
+                    info!("Ready to attach to Cntr-Pod");
                     break;
                 }
             }
             _ => {}
         }
     }
-    Ok(pods)
+    Ok(())
 }
 
-async fn enter(pods: Api<Pod>) -> anyhow::Result<Api<Pod>> {
-    // Do an interactive exec to a blog pod with the `sh` command
-    let ap = AttachParams::interactive_tty();
-    let mut attached = pods.exec("cntr", vec!["/bin/bash"], &ap).await?;
-
-    // The received streams from `AttachedProcess`
-    let mut stdin_writer = attached.stdin().unwrap();
-    let mut stdout_reader = attached.stdout().unwrap();
-
-    // > For interactive uses, it is recommended to spawn a thread dedicated to user input and use blocking IO directly in that thread.
-    // > https://docs.rs/tokio/0.2.24/tokio/io/fn.stdin.html
-    let mut stdin = tokio::io::stdin();
-    let mut stdout = tokio::io::stdout();
-    // pipe current stdin to the stdin writer from ws
-    tokio::spawn(async move {
-        tokio::io::copy(&mut stdin, &mut stdin_writer)
-            .await
-            .unwrap();
-    });
-    // pipe stdout from ws to current stdout
-    tokio::spawn(async move {
-        tokio::io::copy(&mut stdout_reader, &mut stdout)
-            .await
-            .unwrap();
-    });
-
-    // When done, type `exit\n` to end it, so the pod is deleted.
-    let status = attached.await;
-    println!("{:?}", status);
-
-    Ok(pods)
-}
-
-async fn attach(pods: Api<Pod>, id: String) -> anyhow::Result<Api<Pod>> {
+async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
     // Do an interactive exec to a blog pod with the `sh` command
     let ap = AttachParams::interactive_tty();
     let mut attached = pods.exec("cntr", vec!["/bin/bash"], &ap).await?;
@@ -137,16 +102,19 @@ async fn attach(pods: Api<Pod>, id: String) -> anyhow::Result<Api<Pod>> {
             .unwrap();
     });
 
+    
+    info!("Attached to Cntr-Pod");
+
     // When done, type `exit\n` to end it, so the pod is deleted.
     let status = attached.await;
-    println!("{:?}", status);
+    // println!("{:?}", status);
 
-    Ok(pods)
+    Ok(())
 }
 
-async fn delete(pods: Api<Pod>) -> anyhow::Result<()> {
+async fn delete(pods: &Api<Pod>) -> anyhow::Result<()> {
     // Delete it
-    println!("deleting");
+    info!("Deleting Cntr-Pod");
     pods.delete("cntr", &DeleteParams::default())
         .await?
         .map_left(|pdel| {
@@ -155,7 +123,6 @@ async fn delete(pods: Api<Pod>) -> anyhow::Result<()> {
 
     Ok(())
 }
-
 
 pub async fn get_container_id(pods: Api<Pod>) -> anyhow::Result<HashMap<String, String>> {
     let mut map = HashMap::new();

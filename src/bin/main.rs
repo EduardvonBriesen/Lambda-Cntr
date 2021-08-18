@@ -27,7 +27,8 @@ fn main() {
                 .help("Namespace of container")
                 .short("n")
                 .long("namespace")
-                .takes_value(true),
+                .takes_value(true)
+                .default_value("default"),
         );
 
     let matches = App::new("\u{03bb}-Cntr")
