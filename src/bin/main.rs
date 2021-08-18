@@ -6,8 +6,8 @@ extern crate clap;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
 fn attach(args: &ArgMatches) {
-    let container_id = args.value_of("id").unwrap().to_string();
-    let namespace = args.value_of("ns").unwrap().to_string();
+    let container_id = args.value_of("pod_name").unwrap().to_string();
+    let namespace = args.value_of("namespace").unwrap().to_string();
     lambda_cntr::kube_controller::deploy_and_attach(container_id, namespace);
 }
 
@@ -17,13 +17,13 @@ fn main() {
         .version(crate_version!())
         .author(crate_authors!("\n"))
         .arg(
-            Arg::with_name("id")
-                .help("Container ID")
+            Arg::with_name("pod_name")
+                .help("Pod Name")
                 .required(true)
                 .index(1),
         )
         .arg(
-            Arg::with_name("ns")
+            Arg::with_name("namespace")
                 .help("Namespace of container")
                 .short("n")
                 .long("namespace")
