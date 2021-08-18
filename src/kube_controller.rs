@@ -1,6 +1,7 @@
 use futures::{StreamExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Pod;
 use log::info;
+use std::collections::HashMap;
 
 use kube::{
     api::{Api, AttachParams, DeleteParams, ListParams, PostParams, ResourceExt, WatchEvent},
@@ -10,46 +11,48 @@ use std::fs::File;
 use std::io::BufReader;
 use tokio::io::AsyncWriteExt;
 
-#[tokio::main]
-pub async fn main() -> anyhow::Result<()> {
-    let pod: Api<Pod> = deploy().await?;
-
-    let pod: Api<Pod> = enter(pod).await?;
-
-    delete(pod).await?;
-
-    Ok(())
+fn main() {
 }
 
 #[tokio::main]
-pub async fn deploy_and_attach(id: String) -> anyhow::Result<()> {
-    let pod: Api<Pod> = deploy().await?;
-
-    let pod: Api<Pod> = attach(pod, id).await?;
-
-    delete(pod).await?;
-
-    Ok(())
-}
-
-async fn deploy() -> anyhow::Result<Api<Pod>> {
+pub async fn deploy_and_attach(container_id: String, namespace: String) -> anyhow::Result<()> {
+    
     std::env::set_var("RUST_LOG", "info,kube=debug");
     env_logger::init();
     let client = Client::try_default().await?;
-    let namespace = std::env::var("NAMESPACE").unwrap_or_else(|_| "default".into());
+    
+    let pods: Api<Pod> = deploy(client, namespace).await?;
+    
+    let map = get_container_id(pods.clone()).await?;
+    for (key, value) in &map {
+        println!("{}: {}", key, value);
+    }
+
+    if let Some(id) = map.get(&container_id){
+        let container_id = id;
+    } 
+
+    let pods: Api<Pod> = attach(pods, container_id.to_string()).await?;
+
+    delete(pods).await?;
+
+    Ok(())
+}
+
+async fn deploy(client: Client, namespace: String) -> anyhow::Result<Api<Pod>> {
+    let pods: Api<Pod> = Api::namespaced(client, &namespace);
 
     let file = File::open("./cntr.yaml").expect("Unable to open file");
     let reader = BufReader::new(file);
     let pod = serde_yaml::from_reader(reader).expect("Unable to parse file");
 
-    let pods: Api<Pod> = Api::namespaced(client, &namespace);
     // Stop on error including a pod already exists or is still being deleted.
     pods.create(&PostParams::default(), &pod).await?;
 
     // Wait until the pod is running, otherwise we get 500 error.
     let lp = ListParams::default()
         .fields("metadata.name=cntr")
-        .timeout(10);
+        .timeout(20);
     let mut stream = pods.watch(&lp, "0").await?.boxed();
     while let Some(status) = stream.try_next().await? {
         match status {
@@ -151,4 +154,26 @@ async fn delete(pods: Api<Pod>) -> anyhow::Result<()> {
         });
 
     Ok(())
+}
+
+
+pub async fn get_container_id(pods: Api<Pod>) -> anyhow::Result<HashMap<String, String>> {
+    let mut map = HashMap::new();
+
+    for p in pods.list(&Default::default()).await? {
+        if let Some(p_status) = p.clone().status {
+            if let Some(c_status) = p_status.container_statuses {
+                for c in c_status {
+                    if let Some(container_id) = c.container_id {
+                        let id = container_id.clone();
+                        if let Some(id) = id.strip_prefix("containerd://") {
+                            map.insert(p.name(), id.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(map)
 }

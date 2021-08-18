@@ -5,9 +5,10 @@ extern crate clap;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
-fn deploy(args: &ArgMatches) {
+fn attach(args: &ArgMatches) {
     let container_id = args.value_of("id").unwrap().to_string();
-    lambda_cntr::pod_shell::deploy_and_attach(container_id);
+    let namespace = args.value_of("ns").unwrap().to_string();
+    lambda_cntr::kube_controller::deploy_and_attach(container_id, namespace);
 }
 
 fn main() {
@@ -17,9 +18,16 @@ fn main() {
         .author(crate_authors!("\n"))
         .arg(
             Arg::with_name("id")
-                .help("container id")
+                .help("Container ID")
                 .required(true)
                 .index(1),
+        )
+        .arg(
+            Arg::with_name("ns")
+                .help("Namespace of container")
+                .short("n")
+                .long("namespace")
+                .takes_value(true),
         );
 
     let matches = App::new("\u{03bb}-Cntr")
@@ -31,7 +39,7 @@ fn main() {
         .get_matches();
 
     match matches.subcommand() {
-        ("attach", Some(attach_matches)) => deploy(attach_matches),
+        ("attach", Some(attach_matches)) => attach(attach_matches),
         ("", None) => unreachable!(),
         _ => unreachable!(),
     };
