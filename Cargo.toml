@@ -12,7 +12,7 @@ tokio = { version = "1.9.0", features = ["full"] }
 futures = "0.3.16"
 kube = { version = "^0.59.0", default-features = true, features = ["admission","client","ws"] }
 k8s-openapi = { version = "0.13.0", default-features = false, features = ["v1_20"] }
-serde_yaml = "0.8.17"
+serde_json = "1.0.66"
 clap = "2.33.3"
 argparse = "0.2.2"
 log = "0.4.11"
