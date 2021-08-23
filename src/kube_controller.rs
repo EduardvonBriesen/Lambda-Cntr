@@ -3,12 +3,11 @@ use k8s_openapi::api::core::v1::Pod;
 use log::{error, info, warn};
 use std::collections::HashMap;
 
+use crate::json_builder;
 use kube::{
     api::{Api, AttachParams, DeleteParams, ListParams, PostParams, ResourceExt, WatchEvent},
     Client,
 };
-use std::fs::File;
-use std::io::BufReader;
 use tokio::io::AsyncWriteExt;
 
 fn main() {}
@@ -40,12 +39,11 @@ pub async fn deploy_and_attach(container_id: String, namespace: String) -> anyho
 }
 
 async fn deploy(pods: &Api<Pod>) -> anyhow::Result<()> {
-    let file = File::open("./cntr.yaml").expect("Unable to open file");
-    let reader = BufReader::new(file);
-    let pod = serde_yaml::from_reader(reader).expect("Unable to parse file");
-
+    let cntr_pod = json_builder::get_json().expect("Unable to parse json");
+    let cntr_pod = serde_json::from_value(cntr_pod).expect("Unable to parse json");
+    
     // Stop on error including a pod already exists or is still being deleted.
-    pods.create(&PostParams::default(), &pod).await?;
+    pods.create(&PostParams::default(), &cntr_pod).await?;
 
     // Wait until the pod is running, otherwise we get 500 error.
     let lp = ListParams::default()
@@ -79,10 +77,7 @@ async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
     let mut stdin_writer = attached.stdin().unwrap();
     let mut stdout_reader = attached.stdout().unwrap();
 
-    let mut s = String::new();
-    s.push_str("cntr attach ");
-    s.push_str(&id);
-    s.push_str("\n");
+    let s = format!("cntr attach {}\n", &id);
     stdin_writer.write(s.as_bytes()).await?;
 
     // > For interactive uses, it is recommended to spawn a thread dedicated to user input and use blocking IO directly in that thread.
@@ -102,7 +97,6 @@ async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
             .unwrap();
     });
 
-    
     info!("Attached to Cntr-Pod");
 
     // When done, type `exit\n` to end it, so the pod is deleted.
