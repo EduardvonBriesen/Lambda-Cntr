@@ -78,7 +78,6 @@ async fn deploy(pods: &Api<Pod>) -> anyhow::Result<()> {
 }
 
 async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
-    // Do an interactive exec to a blog pod with the `sh` command
     let ap = AttachParams::interactive_tty();
     let mut attached = pods.exec("cntr", vec!["/bin/bash"], &ap).await?;
 
@@ -112,8 +111,7 @@ async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
     info!("Attached to Cntr-Pod");
 
     // When done, type `exit\n` to end it, so the pod is deleted.
-    let status = attached.await;
-    // println!("{:?}", status);
+    attached.await;
 
     Ok(())
 }

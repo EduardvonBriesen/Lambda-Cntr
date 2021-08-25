@@ -1,10 +1,11 @@
 # λ-Cntr
 
-λ-Cntr is an extension of [Cntr](https://github.com/Mic92/cntr), enabeling its use in a serverless environment.
+λ-Cntr is a replacement for `kubectl exec` that brings all your developers tools with you.
+It is an extension of [Cntr](https://github.com/Mic92/cntr), enabeling its use in a Kubernetes cluster.
 
 ## Usage
 
-λ-Cntr provides a subcommand `attach` that deploys a Cntr-Pod and attaches it to a Pod.
+λ-Cntr provides a subcommand `attach` that allows you to attach to a Pod.
 
 ```console
 $ lambda-cntr attach --help
@@ -25,3 +26,11 @@ OPTIONS:
 ARGS:
     <pod_name>    Pod Name
 ```
+
+To make full use λ-Cntr build your own [Dockerfile](https://github.com/EduardvonBriesen/Lambda-Cntr/blob/main/Dockerfile) to including your development tools and adjust [cntr.yaml](https://github.com/EduardvonBriesen/Lambda-Cntr/blob/main/cntr.yaml) to refer to your image.
+
+## Caveats 
+
+- Currently only with Containerd as the Kuberntes container runtime.
+- The containerd-socket passed in [cntr.yaml](https://github.com/EduardvonBriesen/Lambda-Cntr/blob/main/cntr.yaml) is specific to k3s and has to be adjusted when used with other Kubernetes distributions.
+- Exiting the shell only exits the pod you attached to, but leaves you in the shell of the cntr-pod. Exit a second time to properly shutdown the application.
