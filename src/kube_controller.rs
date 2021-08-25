@@ -44,29 +44,36 @@ async fn deploy(pods: &Api<Pod>) -> anyhow::Result<()> {
     let reader = BufReader::new(file);
     let pod = serde_yaml::from_reader(reader).expect("Unable to parse file");
 
-    // Stop on error including a pod already exists or is still being deleted.
-    pods.create(&PostParams::default(), &pod).await?;
-
-    // Wait until the pod is running, otherwise we get 500 error.
-    let lp = ListParams::default()
-        .fields("metadata.name=cntr")
-        .timeout(20);
-    let mut stream = pods.watch(&lp, "0").await?.boxed();
-    while let Some(status) = stream.try_next().await? {
-        match status {
-            WatchEvent::Added(o) => {
-                info!("Added Cntr-Pod");
-            }
-            WatchEvent::Modified(o) => {
-                let s = o.status.as_ref().expect("status exists on pod");
-                if s.phase.clone().unwrap_or_default() == "Running" {
-                    info!("Ready to attach to Cntr-Pod");
-                    break;
+    let p = pods.get("cntr").await;
+    match p {
+        Ok(p) => info!("Cntr-Pod already exist, attaching ..."),
+        Err(p) => {
+            // Stop on error including a pod already exists or is still being deleted.
+            info!("Cntr-Pod doesn't exist, creating ...");
+            pods.create(&PostParams::default(), &pod).await?;
+            // Wait until the pod is running, otherwise we get 500 error.
+            let lp = ListParams::default()
+                .fields("metadata.name=cntr")
+                .timeout(20);
+            let mut stream = pods.watch(&lp, "0").await?.boxed();
+            while let Some(status) = stream.try_next().await? {
+                match status {
+                    WatchEvent::Added(o) => {
+                        info!("Added {}", o.name());
+                    }
+                    WatchEvent::Modified(o) => {
+                        let s = o.status.as_ref().expect("status exists on pod");
+                        if s.phase.clone().unwrap_or_default() == "Running" {
+                            info!("Ready to attach to {}", o.name());
+                            break;
+                        }
+                    }
+                    _ => {}
                 }
             }
-            _ => {}
         }
-    }
+    };
+
     Ok(())
 }
 
@@ -102,7 +109,6 @@ async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
             .unwrap();
     });
 
-    
     info!("Attached to Cntr-Pod");
 
     // When done, type `exit\n` to end it, so the pod is deleted.
