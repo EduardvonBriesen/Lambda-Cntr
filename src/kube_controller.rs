@@ -9,6 +9,8 @@ use kube::{
     Client,
 };
 use tokio::io::AsyncWriteExt;
+use std::io::BufReader;
+use std::fs::File;
 
 fn main() {}
 
@@ -39,9 +41,8 @@ pub async fn deploy_and_attach(container_id: String, namespace: String) -> anyho
 }
 
 async fn deploy(pods: &Api<Pod>) -> anyhow::Result<()> {
-    let file = File::open("./cntr.yaml").expect("Unable to open file");
-    let reader = BufReader::new(file);
-    let pod = serde_yaml::from_reader(reader).expect("Unable to parse file");
+    let cntr_pod = json_builder::get_json().expect("Unable to parse json");
+    let cntr_pod = serde_json::from_value(cntr_pod).expect("Unable to parse json");
 
     let p = pods.get("cntr").await;
     match p {
@@ -49,7 +50,7 @@ async fn deploy(pods: &Api<Pod>) -> anyhow::Result<()> {
         Err(p) => {
             // Stop on error including a pod already exists or is still being deleted.
             info!("Cntr-Pod doesn't exist, creating ...");
-            pods.create(&PostParams::default(), &pod).await?;
+            pods.create(&PostParams::default(), &cntr_pod).await?;
             // Wait until the pod is running, otherwise we get 500 error.
             let lp = ListParams::default()
                 .fields("metadata.name=cntr")
@@ -68,33 +69,13 @@ async fn deploy(pods: &Api<Pod>) -> anyhow::Result<()> {
                         }
                     }
                     _ => {}
-    // let cntr_pod = json_builder::get_json().expect("Unable to parse json");
-    // let cntr_pod = serde_json::from_value(cntr_pod).expect("Unable to parse json");
-    
-    // // Stop on error including a pod already exists or is still being deleted.
-    // pods.create(&PostParams::default(), &cntr_pod).await?;
-
-    // // Wait until the pod is running, otherwise we get 500 error.
-    // let lp = ListParams::default()
-    //     .fields("metadata.name=cntr")
-    //     .timeout(20);
-    // let mut stream = pods.watch(&lp, "0").await?.boxed();
-    // while let Some(status) = stream.try_next().await? {
-    //     match status {
-    //         WatchEvent::Added(o) => {
-    //             info!("Added Cntr-Pod");
-    //         }
-    //         WatchEvent::Modified(o) => {
-    //             let s = o.status.as_ref().expect("status exists on pod");
-    //             if s.phase.clone().unwrap_or_default() == "Running" {
-    //                 info!("Ready to attach to Cntr-Pod");
-    //                 break;
                 }
             }
         }
     };
 
     Ok(())
+
 }
 
 async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
