@@ -11,12 +11,15 @@ use kube::{
 use tokio::io::AsyncWriteExt;
 use std::io::BufReader;
 use std::fs::File;
+use std::env;
 
 fn main() {}
 
 #[tokio::main]
-pub async fn deploy_and_attach(container_id: String, namespace: String) -> anyhow::Result<()> {
-    std::env::set_var("RUST_LOG", "info,kube=debug");
+pub async fn deploy_and_attach() -> anyhow::Result<()> {
+    let namespace = env::var("NAMESPACE").expect("No namespace specified!");
+    let container_id = env::var("CONTAINER_ID").expect("No container specified!");
+
     env_logger::init();
     let client = Client::try_default().await?;
     let pods: Api<Pod> = Api::namespaced(client, &namespace);
@@ -46,8 +49,8 @@ async fn deploy(pods: &Api<Pod>) -> anyhow::Result<()> {
 
     let p = pods.get("cntr").await;
     match p {
-        Ok(p) => info!("Cntr-Pod already exist, attaching ..."),
-        Err(p) => {
+        Ok(_p) => info!("Cntr-Pod already exist, attaching ..."),
+        Err(_p) => {
             // Stop on error including a pod already exists or is still being deleted.
             info!("Cntr-Pod doesn't exist, creating ...");
             pods.create(&PostParams::default(), &cntr_pod).await?;

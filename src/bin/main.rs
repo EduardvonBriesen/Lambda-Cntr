@@ -4,11 +4,13 @@ extern crate lambda_cntr;
 extern crate clap;
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use std::env;
 
 fn attach(args: &ArgMatches) {
-    let container_id = args.value_of("pod_name").unwrap().to_string();
-    let namespace = args.value_of("namespace").unwrap().to_string();
-    lambda_cntr::kube_controller::deploy_and_attach(container_id, namespace);
+    env::set_var("CONTAINER_ID", args.value_of("pod_name").unwrap().to_string());
+    env::set_var("NAMESPACE", args.value_of("namespace").unwrap().to_string());
+    env::set_var("RUST_LOG", args.value_of("log-level").unwrap().to_string());
+    lambda_cntr::kube_controller::deploy_and_attach();
 }
 
 fn main() {
@@ -29,6 +31,13 @@ fn main() {
                 .long("namespace")
                 .takes_value(true)
                 .default_value("default"),
+        ).arg(
+            Arg::with_name("log-level")
+                .help("Set the logging level")
+                .short("l")
+                .long("log-level")
+                .takes_value(true)
+                .default_value("info,kube=debug"),
         );
 
     let matches = App::new("\u{03bb}-Cntr")
