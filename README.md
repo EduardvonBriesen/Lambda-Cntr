@@ -14,14 +14,19 @@ Eduard von Briesen <e.v.briesen@gmail.com>
 Attach Cntr-Pod to Container in Kubeneretes
 
 USAGE:
-    lambda-cntr attach [OPTIONS] <pod_name>
+    lambda-cntr attach [FLAGS] [OPTIONS] <pod_name> --socket-path <socket-path>
 
 FLAGS:
+    -d, --docker     Set if Docker is used as container engine [default: containerd]
     -h, --help       Prints help information
     -V, --version    Prints version information
 
 OPTIONS:
-    -n, --namespace <namespace>    Namespace of container [default: default]
+    -i, --image <image>                Set your container image [default: onestone070/cntr]
+    -l, --log-level <log-level>        Set the logging level (e.g. "info,kube=debug") [default: info]
+    -n, --namespace <namespace>        Namespace of container [default: default]
+    -s, --socket-path <socket-path>    Path to the socket of the container engine on your node (e.g.
+                                       "/run/k3s/containerd/containerd.sock")
 
 ARGS:
     <pod_name>    Pod Name
@@ -31,6 +36,4 @@ To make full use λ-Cntr build your own [Dockerfile](https://github.com/Eduardvo
 
 ## Caveats 
 
-- Currently only with Containerd as the Kuberntes container runtime.
-- The containerd-socket passed in [cntr.yaml](https://github.com/EduardvonBriesen/Lambda-Cntr/blob/main/cntr.yaml) is specific to k3s and has to be adjusted when used with other Kubernetes distributions.
 - Exiting the shell only exits the pod you attached to, but leaves you in the shell of the cntr-pod. Exit a second time to properly shutdown the application.
