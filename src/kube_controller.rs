@@ -1,6 +1,6 @@
 use futures::{StreamExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Pod;
-use log::{error, info, warn};
+use log::{error, info};
 use std::collections::HashMap;
 
 use crate::json_builder;
@@ -9,8 +9,6 @@ use kube::{
     Client,
 };
 use tokio::io::AsyncWriteExt;
-use std::io::BufReader;
-use std::fs::File;
 use std::env;
 
 fn main() {}
