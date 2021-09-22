@@ -59,7 +59,7 @@ fn main() {
                 .short("i")
                 .long("image")
                 .takes_value(true)
-                .default_value("onestone070/cntr"),
+                .default_value("onestone070/lambda-cntr"),
         )
         .arg(
             Arg::with_name("socket-path")

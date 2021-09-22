@@ -5,7 +5,7 @@ use std::env;
 pub fn get_json() -> Result<serde_json::Value> {
   let image = env::var("CNTR_IMAGE").expect("No image specified!");
   let mount_path = env::var("MOUNT_PATH").expect("No path specified!");
-  let path =  env::var("SOCKET_PATH").expect("No path specified!");;
+  let path =  env::var("SOCKET_PATH").expect("No path specified!");
 
   let cntr_pod = serde_json::from_value(json!({
       "apiVersion": "v1",
