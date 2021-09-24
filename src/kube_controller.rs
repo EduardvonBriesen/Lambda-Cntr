@@ -34,7 +34,7 @@ pub async fn deploy_and_attach() -> anyhow::Result<()> {
         if let Some(id) = map.get(&container_id) {
             deploy(&pods).await?;
             attach(&pods, id.to_string()).await?;
-            delete(&pods).await?;
+            // delete(&pods).await?;
         }
     }
 
@@ -110,7 +110,7 @@ async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
     info!("Attached to Cntr-Pod");
 
     // When done, type `exit\n` to end it, so the pod is deleted.
-    attached.await;
+    // attached.await;
 
     Ok(())
 }
