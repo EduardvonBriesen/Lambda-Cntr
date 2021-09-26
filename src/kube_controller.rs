@@ -108,7 +108,7 @@ async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
     });
 
     info!("Attached to Cntr-Pod");
-
+    
     // When done, type `exit\n` to end it, so the pod is deleted.
     // attached.await;
 
