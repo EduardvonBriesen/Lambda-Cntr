@@ -4,8 +4,8 @@ FROM rust:1.46.0 as cntr
 RUN rustup target add x86_64-unknown-linux-musl
 
 # Add containerd binaries
-RUN wget https://github.com/containerd/containerd/releases/download/v1.4.6/containerd-1.4.6-linux-amd64.tar.gz \
-      && tar -xvf containerd-1.4.6-linux-amd64.tar.gz 
+# RUN wget https://github.com/containerd/containerd/releases/download/v1.4.6/containerd-1.4.6-linux-amd64.tar.gz \
+#       && tar -xvf containerd-1.4.6-linux-amd64.tar.gz 
 
 # Add docker-pid binary
 RUN curl -sL https://github.com/Mic92/docker-pid/releases/download/1.0.0/docker-pid-linux-amd64 \
@@ -20,9 +20,25 @@ RUN cargo build --release --target=x86_64-unknown-linux-musl || true
 RUN strip target/x86_64-unknown-linux-musl/release/cntr -o /usr/bin/cntr
 RUN cargo install cntr
 
-FROM ubuntu:groovy
+FROM alpine:edge
+
+RUN echo 'https://dl-cdn.alpinelinux.org/alpine/edge/testing' >> /etc/apk/repositories
+
+RUN apk update && \
+    apk add --no-cache \
+    # build/code
+    build-base git go bash bash-completion ncurses vim tmux jq \
+    # network
+    bind-tools iputils tcpdump curl nmap tcpflow iftop net-tools mtr netcat-openbsd bridge-utils iperf ngrep \
+    # certificates
+    ca-certificates openssl \
+    # processes/io
+    htop atop strace iotop sysstat ltrace ncdu logrotate hdparm pciutils psmisc tree pv \
+    # kubernetes
+    kubectl \
+    containerd
+
 WORKDIR /root/
 COPY --from=cntr /usr/bin/cntr /usr/bin/cntr
 COPY --from=cntr /usr/bin/docker-pid /usr/bin/docker-pid
-COPY --from=cntr /bin/ctr /usr/bin/ctr
 ENTRYPOINT ["/usr/bin/cntr"]
