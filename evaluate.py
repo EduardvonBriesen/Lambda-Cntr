@@ -177,7 +177,7 @@ def benchmark_lambda_start_up_warm(api, repeat: int) -> list[float]:
     return times
 
 
-def benchmark_ephemeral_start_up(api, repeat: int) -> list[float]:
+def benchmark_ephemeral_start_up_cold(api, repeat: int) -> list[float]:
     times = []
 
     # Deploy and attach ephemeral containers repeatedly
@@ -191,6 +191,20 @@ def benchmark_ephemeral_start_up(api, repeat: int) -> list[float]:
 
     return times
 
+def benchmark_ephemeral_start_up_warm(api, repeat: int) -> list[float]:
+    times = []
+    ephemeral_attach(api)
+
+    # Deploy and attach ephemeral containers repeatedly
+    for x in range(repeat):
+        print('[', x+1, '|', repeat, ']')
+        deploy_test_pod(api)
+        starttime = timeit.default_timer()
+        ephemeral_attach(api)
+        times.append(timeit.default_timer() - starttime)
+
+    delete_pod(api, TEST_POD_NAME)
+    return times
 
 def pod_memory(pod_name: str) -> list[tuple[str, int]]:
     result = []
@@ -242,7 +256,6 @@ def benchmark_ephemeral_memory(api,  file: str):
         f.write('POD_ATTACHED: %s\n' % mem)
 
         print(pod_memory(TEST_POD_IMAGE))
-
     # delete_pod(api, TEST_POD_IMAGE)
 
 
@@ -251,17 +264,20 @@ def main():
     api = client.CoreV1Api()
     create_test_namespace(api)
 
-    cold = benchmark_lambda_start_up_cold(api, 1)
-    warm = benchmark_lambda_start_up_warm(api, 1)
-    ephem = benchmark_ephemeral_start_up(api, 1)
+    lambda_cold = benchmark_lambda_start_up_cold(api, 20)
+    lambda_warm = benchmark_lambda_start_up_warm(api, 20)
+    ephem_cold = benchmark_ephemeral_start_up_cold(api, 20)
+    ephem_warm = benchmark_ephemeral_start_up_warm(api, 20)
 
     with open('results.txt', 'a') as f:
-        f.write('COLD_STARTUP: %s\n' % cold)
-        f.write('COLD_STARTUP_AVG: %s\n' % (sum(cold)/len(cold)))
-        f.write('WARM_STARTUP: %s\n' % warm)
-        f.write('WARM_STARTUP_AVG: %s\n' % (sum(warm)/len(warm)))
-        f.write('EPHEM_STARTUP: %s\n' % ephem)
-        f.write('EPHEM_STARTUP_AVG: %s\n' % (sum(ephem)/len(ephem)))
+        f.write('LAMBDA_COLD_STARTUP: %s\n' % lambda_cold)
+        f.write('LAMBDA_COLD_STARTUP_AVG: %s\n' % (sum(lambda_cold)/len(lambda_cold)))
+        f.write('LAMBDA_WARM_STARTUP: %s\n' % lambda_warm)
+        f.write('LAMBDA_WARM_STARTUP_AVG: %s\n' % (sum(lambda_warm)/len(lambda_warm)))
+        f.write('EPHEM_COLD_STARTUP: %s\n' % ephem_cold)
+        f.write('EPHEM_COLD_STARTUP_AVG: %s\n' % (sum(ephem_cold)/len(ephem_cold)))
+        f.write('EPHEM_WARM_STARTUP: %s\n' % ephem_warm)
+        f.write('EPHEM_WARM_STARTUP_AVG: %s\n' % (sum(ephem_warm)/len(ephem_warm)))
 
 if __name__ == '__main__':
     main()
