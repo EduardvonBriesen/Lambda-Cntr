@@ -113,7 +113,7 @@ def delete_pod(api, pod_name: str):
 
 
 def lambda_attach():
-    cmd = ['./target/debug/lambda-cntr', 'attach', TEST_POD_NAME,
+    cmd = ['./target/release/lambda-cntr', 'attach', TEST_POD_NAME,
            '-s', SOCKET, '-n', NAMESPACE, '-i', DEBUG_IMAGE]
     print(f'Attaching lambda-cntr with: ' + ' '.join(cmd))
     subprocess.run(cmd)
@@ -191,6 +191,7 @@ def benchmark_ephemeral_start_up_cold(api, repeat: int) -> list[float]:
 
     return times
 
+
 def benchmark_ephemeral_start_up_warm(api, repeat: int) -> list[float]:
     times = []
     ephemeral_attach(api)
@@ -205,6 +206,7 @@ def benchmark_ephemeral_start_up_warm(api, repeat: int) -> list[float]:
 
     delete_pod(api, TEST_POD_NAME)
     return times
+
 
 def pod_memory(pod_name: str) -> list[tuple[str, int]]:
     result = []
@@ -271,13 +273,18 @@ def main():
 
     with open('results.txt', 'a') as f:
         f.write('LAMBDA_COLD_STARTUP: %s\n' % lambda_cold)
-        f.write('LAMBDA_COLD_STARTUP_AVG: %s\n' % (sum(lambda_cold)/len(lambda_cold)))
+        f.write('LAMBDA_COLD_STARTUP_AVG: %s\n' %
+                (sum(lambda_cold)/len(lambda_cold)))
         f.write('LAMBDA_WARM_STARTUP: %s\n' % lambda_warm)
-        f.write('LAMBDA_WARM_STARTUP_AVG: %s\n' % (sum(lambda_warm)/len(lambda_warm)))
+        f.write('LAMBDA_WARM_STARTUP_AVG: %s\n' %
+                (sum(lambda_warm)/len(lambda_warm)))
         f.write('EPHEM_COLD_STARTUP: %s\n' % ephem_cold)
-        f.write('EPHEM_COLD_STARTUP_AVG: %s\n' % (sum(ephem_cold)/len(ephem_cold)))
+        f.write('EPHEM_COLD_STARTUP_AVG: %s\n' %
+                (sum(ephem_cold)/len(ephem_cold)))
         f.write('EPHEM_WARM_STARTUP: %s\n' % ephem_warm)
-        f.write('EPHEM_WARM_STARTUP_AVG: %s\n' % (sum(ephem_warm)/len(ephem_warm)))
+        f.write('EPHEM_WARM_STARTUP_AVG: %s\n' %
+                (sum(ephem_warm)/len(ephem_warm)))
+
 
 if __name__ == '__main__':
     main()
