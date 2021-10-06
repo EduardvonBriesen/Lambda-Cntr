@@ -3,10 +3,6 @@
 FROM rust:1.46.0 as cntr
 RUN rustup target add x86_64-unknown-linux-musl
 
-# Add containerd binaries
-# RUN wget https://github.com/containerd/containerd/releases/download/v1.4.6/containerd-1.4.6-linux-amd64.tar.gz \
-#       && tar -xvf containerd-1.4.6-linux-amd64.tar.gz 
-
 # Add docker-pid binary
 RUN curl -sL https://github.com/Mic92/docker-pid/releases/download/1.0.0/docker-pid-linux-amd64 \
       > /usr/bin/docker-pid && \
@@ -18,7 +14,6 @@ RUN wget https://github.com/Mic92/cntr/releases/download/1.5.1/cntr-src-1.5.1.ta
 WORKDIR  /cntr-src-1.5.1
 RUN cargo build --release --target=x86_64-unknown-linux-musl || true 
 RUN strip target/x86_64-unknown-linux-musl/release/cntr -o /usr/bin/cntr
-RUN cargo install cntr
 
 FROM alpine:edge
 

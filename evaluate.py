@@ -194,12 +194,12 @@ def benchmark_ephemeral_start_up_cold(api, repeat: int) -> list[float]:
 
 def benchmark_ephemeral_start_up_warm(api, repeat: int) -> list[float]:
     times = []
+    deploy_test_pod(api)
     ephemeral_attach(api)
 
     # Deploy and attach ephemeral containers repeatedly
     for x in range(repeat):
         print('[', x+1, '|', repeat, ']')
-        deploy_test_pod(api)
         starttime = timeit.default_timer()
         ephemeral_attach(api)
         times.append(timeit.default_timer() - starttime)
