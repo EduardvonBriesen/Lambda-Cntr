@@ -37,3 +37,5 @@ WORKDIR /root/
 COPY --from=cntr /usr/bin/cntr /usr/bin/cntr
 COPY --from=cntr /usr/bin/docker-pid /usr/bin/docker-pid
 ENTRYPOINT ["/usr/bin/cntr"]
+
+# Credit to https://github.com/giantswarm/debug

@@ -127,10 +127,16 @@ def lambda_exec(cmd: str):
 
 
 def ephemeral_attach(api):
-    cmd = ['kubectl', 'debug', '-n', NAMESPACE,
+    cmd = ['sudo', 'kubectl', 'debug', '-n', NAMESPACE,
            TEST_POD_NAME, f'--image={EPHEMERAL_DEBUG_IMAGE}']
     print(f'Attaching ephemeral container with: ' + ' '.join(cmd))
     subprocess.run(cmd)
+
+def ephemeral_attach_background(api):
+    cmd = ['sudo', 'kubectl', 'debug', '-it', '-n', NAMESPACE,
+           TEST_POD_NAME, f'--image={EPHEMERAL_DEBUG_IMAGE}']
+    print(f'Attaching ephemeral container with: ' + ' '.join(cmd))
+    subprocess.Popen(cmd)
 
     while True:
         api_response = api.read_namespaced_pod(
@@ -200,6 +206,7 @@ def benchmark_ephemeral_start_up_warm(api, repeat: int) -> list[float]:
     # Deploy and attach ephemeral containers repeatedly
     for x in range(repeat):
         print('[', x+1, '|', repeat, ']')
+        deploy_test_pod(api)
         starttime = timeit.default_timer()
         ephemeral_attach(api)
         times.append(timeit.default_timer() - starttime)
@@ -213,7 +220,6 @@ def pod_memory(pod_name: str) -> list[tuple[str, int]]:
     api = client.CustomObjectsApi()
     resource = api.list_namespaced_custom_object(
         group='metrics.k8s.io', version='v1beta1', namespace=NAMESPACE, plural='pods')
-    print(resource)
     for pod in resource['items']:
         if pod['metadata']['name'] == pod_name:
             for container in pod['containers']:
@@ -226,18 +232,17 @@ def benchmark_lambda_memory(api,  file: str):
     deploy_test_pod(api)
     # Delete lambda-cntr pod in case on exists
     delete_pod(api, CNTR_POD_NAME)
+    # Attach lambda-cntr
+    lambda_exec('true')
 
     with open(file, 'a') as f:
         # Measure memory of test-pod
         mem = pod_memory(TEST_POD_NAME)
-        f.write('POD_IDLE: %s\n' % mem)
-
-        # Attach lambda-cntr
-        lambda_exec('true')
+        f.write('POD: %s\n' % mem)
 
         # Measure memory of lambda-pod
         mem = pod_memory(CNTR_POD_NAME)
-        f.write('LAMBDA_ATTACHED: %s\n' % mem)
+        f.write('LAMBDA: %s\n' % mem)
 
     delete_pod(api, TEST_POD_IMAGE)
     delete_pod(api, CNTR_POD_NAME)
