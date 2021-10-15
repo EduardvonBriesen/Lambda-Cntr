@@ -22,7 +22,7 @@ pub fn get_json() -> Result<serde_json::Value> {
             "imagePullPolicy": "Always",
             "command": [
               "sleep",
-              "3600"
+              "360000"
             ],
             "securityContext": {
               "privileged": true,
