@@ -17,12 +17,12 @@ pub fn get_json() -> Result<serde_json::Value> {
         "hostPID": true,
         "containers": [
           {
-            "name": "cntr",
+            "name": "lambda-cntr",
             "image": image,
             "imagePullPolicy": "Always",
             "command": [
               "sleep",
-              "3600"
+              "360000"
             ],
             "securityContext": {
               "privileged": true,

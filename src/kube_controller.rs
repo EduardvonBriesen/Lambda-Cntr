@@ -5,10 +5,11 @@ use std::collections::HashMap;
 
 use crate::json_builder;
 use kube::{
-    api::{Api, AttachParams, DeleteParams, ListParams, PostParams, ResourceExt, WatchEvent},
+    api::{Api, AttachedProcess, AttachParams, DeleteParams, ListParams, PostParams, ResourceExt, WatchEvent},
     Client,
 };
 use tokio::io::AsyncWriteExt;
+use tokio_util::io::ReaderStream;
 use std::env;
 
 fn main() {}
@@ -35,6 +36,37 @@ pub async fn deploy_and_attach() -> anyhow::Result<()> {
             deploy(&pods).await?;
             attach(&pods, id.to_string()).await?;
             delete(&pods).await?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::main]
+pub async fn deploy_and_execute() -> anyhow::Result<()> {
+    let namespace = env::var("NAMESPACE").expect("No namespace specified!");
+    let container_id = env::var("CONTAINER_ID").expect("No container specified!");
+    let cmd = env::var("CMD").expect("No command specified!");
+
+    info!("Command {}", cmd);
+
+
+    env_logger::init();
+    let client = Client::try_default().await?;
+    let pods: Api<Pod> = Api::namespaced(client, &namespace);
+
+    let map = get_container_id(pods.clone()).await?;
+
+    if !map.contains_key(&container_id) {
+        error!(
+            "No pod \"{}\" found in namespace \"{}\"!",
+            container_id,
+            namespace.clone()
+        );
+    } else {
+        if let Some(id) = map.get(&container_id) {
+            deploy(&pods).await?;
+            execute(&pods, id.to_string(), cmd).await?;
         }
     }
 
@@ -108,8 +140,33 @@ async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
     });
 
     info!("Attached to Cntr-Pod");
-
+    
     // When done, type `exit\n` to end it, so the pod is deleted.
+    attached.await;
+
+    Ok(())
+}
+
+async fn execute(pods: &Api<Pod>, id: String, cmd: String) -> anyhow::Result<()> {
+    let ap = AttachParams::interactive_tty();
+    let mut attached = pods.exec("cntr", vec!["/bin/bash"], &ap).await?;
+
+    // The received streams from `AttachedProcess`
+    let mut stdin_writer = attached.stdin().unwrap();
+    let mut stdout_reader = attached.stdout().unwrap();
+
+    let s = format!("cntr attach {} -- {} && exit\n", &id, &cmd);
+    stdin_writer.write(s.as_bytes()).await?;
+
+    let mut stdout = tokio::io::stdout();
+    // pipe current stdin to the stdin writer from ws
+    // pipe stdout from ws to current stdout
+    tokio::spawn(async move {
+        tokio::io::copy(&mut stdout_reader, &mut stdout)
+            .await
+            .unwrap();
+    });
+    
     attached.await;
 
     Ok(())
