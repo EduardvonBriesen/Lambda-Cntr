@@ -18,11 +18,6 @@ fn attach(args: &ArgMatches) {
         "SOCKET_PATH",
         args.value_of("socket-path").unwrap().to_string(),
     );
-    if args.is_present("docker") {
-        env::set_var("MOUNT_PATH", "/run/docker/docker.sock");
-    } else {
-        env::set_var("MOUNT_PATH", "/run/containerd/containerd.sock");
-    }
     lambda_cntr::kube_controller::deploy_and_attach();
 }
 
@@ -89,12 +84,6 @@ fn main() {
                 .long("socket-path")
                 .takes_value(true)
                 .required(true),
-        )
-        .arg(
-            Arg::with_name("docker")
-                .help("Set if Docker is used as container engine [default: containerd]")
-                .short("d")
-                .long("docker"),
         );
 
     let execute_command = SubCommand::with_name("execute")
@@ -144,12 +133,6 @@ fn main() {
                 .long("socket-path")
                 .takes_value(true)
                 .required(true),
-        )
-        .arg(
-            Arg::with_name("docker")
-                .help("Set if Docker is used as container engine [default: containerd]")
-                .short("d")
-                .long("docker"),
         );
 
     let matches = App::new("\u{03bb}-Cntr")
