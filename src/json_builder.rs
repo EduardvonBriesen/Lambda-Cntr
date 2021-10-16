@@ -5,10 +5,12 @@ use std::env;
 pub fn get_json() -> Result<serde_json::Value> {
   let image = env::var("CNTR_IMAGE").expect("No image specified!");
   let path = env::var("SOCKET_PATH").expect("No path specified!");
+  let node = env::var("NODE").expect("No node specified!");
   let container_engine = env::var("CONTAINER_ENGINE").expect("No engine specified!");
 
-  let mut mount_path = String::new();
+  let pod_name = format!("lambda-cntr-{}", node);
 
+  let mut mount_path = String::new();
   match container_engine.as_str() {
     "docker" => {
       mount_path = String::from("/run/docker.sock");
@@ -25,7 +27,7 @@ pub fn get_json() -> Result<serde_json::Value> {
       "apiVersion": "v1",
       "kind": "Pod",
       "metadata": {
-        "name": "lambda-cntr"
+        "name": pod_name,
       },
       "spec": {
         "hostPID": true,
@@ -36,7 +38,7 @@ pub fn get_json() -> Result<serde_json::Value> {
             "imagePullPolicy": "Always",
             "command": [
               "sleep",
-              "360000"
+              "3600"
             ],
             "securityContext": {
               "privileged": true,
@@ -45,7 +47,7 @@ pub fn get_json() -> Result<serde_json::Value> {
             "volumeMounts": [
               {
                 "name": "container-sock",
-                "mountPath": mount_path.to_string(),
+                "mountPath": mount_path,
               }
             ],
             "env": [
@@ -65,7 +67,10 @@ pub fn get_json() -> Result<serde_json::Value> {
             }
           }
         ],
-        "restartPolicy": "Never"
+        "restartPolicy": "Never",
+        "nodeSelector": {
+            "kubernetes.io/hostname": node,
+          }
       }
   }))?;
 

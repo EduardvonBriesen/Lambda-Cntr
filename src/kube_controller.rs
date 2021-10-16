@@ -1,19 +1,17 @@
 use futures::{StreamExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Pod;
 use log::{error, info};
-use std::collections::HashMap;
 
 use crate::json_builder;
 use kube::{
     api::{
-        Api, AttachParams, AttachedProcess, DeleteParams, ListParams, PostParams, ResourceExt,
+        Api, AttachParams, DeleteParams, ListParams, PostParams, ResourceExt,
         WatchEvent,
     },
     Client,
 };
 use std::env;
 use tokio::io::AsyncWriteExt;
-use tokio_util::io::ReaderStream;
 
 fn main() {}
 
@@ -24,7 +22,7 @@ pub async fn deploy_and_attach() -> anyhow::Result<()> {
 
     env_logger::init();
     let client = Client::try_default().await?;
-    let pods: Api<Pod> = Api::namespaced(client, &namespace);
+    let pods: Api<Pod> = Api::namespaced(client.clone(), &namespace);
 
     let pod: Pod = pods.get(&container_name).await?;
 
@@ -35,10 +33,11 @@ pub async fn deploy_and_attach() -> anyhow::Result<()> {
             namespace.clone()
         );
     } else {
-        let id = get_container_id(pod).await?;
-        deploy(&pods).await?;
-        attach(&pods, id.to_string()).await?;
-        delete(&pods).await?;
+        let id = get_container_id(pod.clone()).await?;
+        let node = get_node(pod.clone()).await?;
+        deploy(&pods, node.clone()).await?;
+        attach(&pods, node.clone(), id.to_string()).await?;
+        delete(&pods, node.clone()).await?;
     }
 
     Ok(())
@@ -65,29 +64,32 @@ pub async fn deploy_and_execute() -> anyhow::Result<()> {
             namespace.clone()
         );
     } else {
-        let id = get_container_id(pod).await?;
-        deploy(&pods).await?;
-        execute(&pods, id.to_string(), cmd).await?;
+        let id = get_container_id(pod.clone()).await?;
+        let node = get_node(pod.clone()).await?;
+        deploy(&pods, node.clone()).await?;
+        execute(&pods, node.clone(), id.to_string(), cmd).await?;
     }
 
     Ok(())
 }
 
-async fn deploy(pods: &Api<Pod>) -> anyhow::Result<()> {
+async fn deploy(pods: &Api<Pod>, node: String) -> anyhow::Result<()> {
     let cntr_pod = json_builder::get_json().expect("Unable to parse json");
     let cntr_pod = serde_json::from_value(cntr_pod).expect("Unable to parse json");
 
-    let p = pods.get("lambda-cntr").await;
+    let pod_name = format!("lambda-cntr-{}", node);
+
+    let p = pods.get(&pod_name).await;
     match p {
-        Ok(_p) => info!("Lambda-Cntr-Pod already exist, attaching ..."),
+        Ok(_p) => info!("Lambda-Cntr-Pod already exist on {}, attaching ...", node),
         Err(_p) => {
             // Stop on error including a pod already exists or is still being deleted.
-            info!("Lambda-Cntr-Pod doesn't exist, creating ...");
+            info!("Lambda-Cntr-Pod doesn't exist on {}, creating ...", node);
             pods.create(&PostParams::default(), &cntr_pod).await?;
             // Wait until the pod is running, otherwise we get 500 error.
             let lp = ListParams::default()
-                .fields("metadata.name=lambda-cntr")
-                .timeout(20);
+                .fields(&format!("metadata.name={}", pod_name))
+                .timeout(60);
             let mut stream = pods.watch(&lp, "0").await?.boxed();
             while let Some(status) = stream.try_next().await? {
                 match status {
@@ -110,9 +112,10 @@ async fn deploy(pods: &Api<Pod>) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
+async fn attach(pods: &Api<Pod>, node: String, id: String) -> anyhow::Result<()> {
     let ap = AttachParams::interactive_tty();
-    let mut attached = pods.exec("lambda-cntr", vec!["/bin/bash"], &ap).await?;
+    let pod_name = format!("lambda-cntr-{}", node);
+    let mut attached = pods.exec(&pod_name, vec!["/bin/bash"], &ap).await?;
 
     // The received streams from `AttachedProcess`
     let mut stdin_writer = attached.stdin().unwrap();
@@ -145,9 +148,10 @@ async fn attach(pods: &Api<Pod>, id: String) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn execute(pods: &Api<Pod>, id: String, cmd: String) -> anyhow::Result<()> {
+async fn execute(pods: &Api<Pod>, node: String, id: String, cmd: String) -> anyhow::Result<()> {
     let ap = AttachParams::interactive_tty();
-    let mut attached = pods.exec("lambda-cntr", vec!["/bin/bash"], &ap).await?;
+    let pod_name = format!("lambda-cntr-{}", node);
+    let mut attached = pods.exec(&pod_name, vec!["/bin/bash"], &ap).await?;
 
     // The received streams from `AttachedProcess`
     let mut stdin_writer = attached.stdin().unwrap();
@@ -169,20 +173,20 @@ async fn execute(pods: &Api<Pod>, id: String, cmd: String) -> anyhow::Result<()>
     Ok(())
 }
 
-async fn delete(pods: &Api<Pod>) -> anyhow::Result<()> {
+async fn delete(pods: &Api<Pod>, node: String) -> anyhow::Result<()> {
     // Delete it
-    info!("Deleting Lambda-Cntr-Pod");
-    pods.delete("lambda-cntr", &DeleteParams::default())
+    info!("Deleting Lambda-Cntr-Pod from {}", node);
+    let pod_name = format!("lambda-cntr-{}", node);
+    pods.delete(&pod_name, &DeleteParams::default())
         .await?
         .map_left(|pdel| {
-            assert_eq!(pdel.name(), "lambda-cntr");
+            assert_eq!(pdel.name(), pod_name);
         });
 
     Ok(())
 }
 
 // Returns container_id of pod and sets container engine env.
-
 pub async fn get_container_id(pod: Pod) -> anyhow::Result<String> {
     let mut container_id = String::new();
 
@@ -200,4 +204,16 @@ pub async fn get_container_id(pod: Pod) -> anyhow::Result<String> {
     }
 
     Ok(container_id)
+}
+
+pub async fn get_node(pod: Pod) -> anyhow::Result<String> {
+    let mut node = String::new();
+
+    if let Some(p_spec) = pod.clone().spec {
+        if let Some(n_name) = p_spec.node_name {
+            node = n_name;
+            env::set_var("NODE", node.to_string());
+        }
+    }
+    Ok(node)
 }
