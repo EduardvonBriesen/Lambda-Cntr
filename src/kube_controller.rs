@@ -4,10 +4,7 @@ use log::{error, info};
 
 use crate::json_builder;
 use kube::{
-    api::{
-        Api, AttachParams, DeleteParams, ListParams, PostParams, ResourceExt,
-        WatchEvent,
-    },
+    api::{Api, AttachParams, DeleteParams, ListParams, PostParams, ResourceExt, WatchEvent},
     Client,
 };
 use std::env;
@@ -18,7 +15,7 @@ fn main() {}
 #[tokio::main]
 pub async fn deploy_and_attach() -> anyhow::Result<()> {
     let namespace = env::var("NAMESPACE").expect("No namespace specified!");
-    let container_name = env::var("CONTAINER_ID").expect("No container specified!");
+    let container_name = env::var("POD_NAME").expect("No pod specified!");
 
     env_logger::init();
     let client = Client::try_default().await?;
@@ -33,11 +30,15 @@ pub async fn deploy_and_attach() -> anyhow::Result<()> {
             namespace.clone()
         );
     } else {
-        let id = get_container_id(pod.clone()).await?;
-        let node = get_node(pod.clone()).await?;
-        deploy(&pods, node.clone()).await?;
-        attach(&pods, node.clone(), id.to_string()).await?;
-        delete(&pods, node.clone()).await?;
+        match get_container_id(pod.clone()).await {
+            Ok(id) => {
+                let node = get_node(pod.clone()).await?;
+                deploy(&pods, node.clone()).await?;
+                attach(&pods, node.clone(), id.to_string()).await?;
+                delete(&pods, node.clone()).await?;
+            }
+            Err(()) => {}
+        }
     }
 
     Ok(())
@@ -46,7 +47,7 @@ pub async fn deploy_and_attach() -> anyhow::Result<()> {
 #[tokio::main]
 pub async fn deploy_and_execute() -> anyhow::Result<()> {
     let namespace = env::var("NAMESPACE").expect("No namespace specified!");
-    let container_name = env::var("CONTAINER_ID").expect("No container specified!");
+    let container_name = env::var("POD_NAME").expect("No pod specified!");
     let cmd = env::var("CMD").expect("No command specified!");
 
     info!("Command {}", cmd);
@@ -64,10 +65,14 @@ pub async fn deploy_and_execute() -> anyhow::Result<()> {
             namespace.clone()
         );
     } else {
-        let id = get_container_id(pod.clone()).await?;
-        let node = get_node(pod.clone()).await?;
-        deploy(&pods, node.clone()).await?;
-        execute(&pods, node.clone(), id.to_string(), cmd).await?;
+        match get_container_id(pod.clone()).await {
+            Ok(id) => {
+                let node = get_node(pod.clone()).await?;
+                deploy(&pods, node.clone()).await?;
+                execute(&pods, node.clone(), id.to_string(), cmd).await?;
+            }
+            Err(()) => {}
+        }
     }
 
     Ok(())
@@ -187,17 +192,47 @@ async fn delete(pods: &Api<Pod>, node: String) -> anyhow::Result<()> {
 }
 
 // Returns container_id of pod and sets container engine env.
-pub async fn get_container_id(pod: Pod) -> anyhow::Result<String> {
+pub async fn get_container_id(pod: Pod) -> anyhow::Result<String, ()> {
+    let container_name = env::var("CONTAINER_NAME").expect("No container name specified!");
     let mut container_id = String::new();
 
     if let Some(p_status) = pod.clone().status {
         if let Some(c_status) = p_status.container_statuses {
-            for c in c_status {
-                if let Some(c_id) = c.container_id {
-                    let id = c_id.clone();
-                    let v: Vec<&str> = id.split("://").collect();
-                    container_id = v[1].to_string();
-                    env::set_var("CONTAINER_ENGINE", v[0].to_string());
+            if c_status.len() == 1 {
+                for c in c_status {
+                    if let Some(c_id) = c.container_id {
+                        let id = c_id.clone();
+                        let v: Vec<&str> = id.split("://").collect();
+                        container_id = v[1].to_string();
+                        env::set_var("CONTAINER_ENGINE", v[0].to_string());
+                    }
+                }
+            } else {
+                if container_name.eq("") {
+                    error!(
+                        "The Pod {} contains more than one container, please specify a container.",
+                        pod.name()
+                    );
+                    return Err(());
+                }
+                for c in c_status {
+                    if c.name == container_name {
+                        if let Some(c_id) = c.container_id {
+                            let id = c_id.clone();
+                            let v: Vec<&str> = id.split("://").collect();
+                            container_id = v[1].to_string();
+                            env::set_var("CONTAINER_ENGINE", v[0].to_string());
+                            break;
+                        }
+                    }
+                }
+                if container_id.eq("") {
+                    error!(
+                        "The Pod {} did not contain a container named {}.",
+                        pod.name(),
+                        container_name
+                    );
+                    return Err(());
                 }
             }
         }

@@ -7,9 +7,10 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use std::env;
 
 fn attach(args: &ArgMatches) {
+    env::set_var("POD_NAME", args.value_of("pod_name").unwrap().to_string());
     env::set_var(
-        "CONTAINER_ID",
-        args.value_of("pod_name").unwrap().to_string(),
+        "CONTAINER_NAME",
+        args.value_of("container_name").unwrap().to_string(),
     );
     env::set_var("NAMESPACE", args.value_of("namespace").unwrap().to_string());
     env::set_var("RUST_LOG", args.value_of("log-level").unwrap().to_string());
@@ -22,9 +23,10 @@ fn attach(args: &ArgMatches) {
 }
 
 fn execute(args: &ArgMatches) {
+    env::set_var("POD_NAME", args.value_of("pod_name").unwrap().to_string());
     env::set_var(
-        "CONTAINER_ID",
-        args.value_of("pod_name").unwrap().to_string(),
+        "CONTAINER_NAME",
+        args.value_of("container_name").unwrap().to_string(),
     );
     env::set_var("CMD", args.value_of("command").unwrap().to_string());
     env::set_var("NAMESPACE", args.value_of("namespace").unwrap().to_string());
@@ -54,8 +56,14 @@ fn main() {
                 .index(1),
         )
         .arg(
+            Arg::with_name("container_name")
+                .help("Specify the container in the target Pod")
+                .index(2)
+                .default_value(""),
+        )
+        .arg(
             Arg::with_name("namespace")
-                .help("Namespace of container")
+                .help("Specify th namespace of the target Pod")
                 .short("n")
                 .long("namespace")
                 .takes_value(true)
