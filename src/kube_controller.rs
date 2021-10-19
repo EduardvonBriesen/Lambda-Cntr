@@ -10,35 +10,40 @@ use kube::{
 use std::env;
 use tokio::io::AsyncWriteExt;
 
+#[warn(dead_code)]
 fn main() {}
 
 #[tokio::main]
+#[warn(unused_must_use)]
 pub async fn deploy_and_attach() -> anyhow::Result<()> {
     let namespace = env::var("NAMESPACE").expect("No namespace specified!");
     let container_name = env::var("POD_NAME").expect("No pod specified!");
 
     env_logger::init();
-    let client = Client::try_default().await?;
-    let pods: Api<Pod> = Api::namespaced(client.clone(), &namespace);
-
-    let pod: Pod = pods.get(&container_name).await?;
-
-    if pod.name().is_empty() {
-        error!(
-            "No pod \"{}\" found in namespace \"{}\"!",
-            container_name,
-            namespace.clone()
-        );
-    } else {
-        match get_container_id(pod.clone()).await {
-            Ok(id) => {
-                let node = get_node(pod.clone()).await?;
-                deploy(&pods, node.clone()).await?;
-                attach(&pods, node.clone(), id.to_string()).await?;
-                delete(&pods, node.clone()).await?;
+    
+    match Client::try_default().await {
+        Ok(client) => {
+            let pods: Api<Pod> = Api::namespaced(client.clone(), &namespace);
+            match pods.get(&container_name).await {
+                Ok(pod) => match get_container_id(pod.clone()).await {
+                    Ok(id) => {
+                        let node = get_node(pod.clone()).await?;
+                        deploy(&pods, node.clone()).await?;
+                        attach(&pods, node.clone(), id.to_string()).await?;
+                        delete(&pods, node.clone()).await?;
+                    }
+                    Err(()) => {}
+                },
+                Err(_) => {
+                    error!(
+                        "No pod \"{}\" found in namespace \"{}\"!",
+                        container_name,
+                        namespace.clone()
+                    );
+                }
             }
-            Err(()) => {}
         }
+        Err(_) => error!("Could not connect to client!"),
     }
 
     Ok(())
@@ -50,29 +55,30 @@ pub async fn deploy_and_execute() -> anyhow::Result<()> {
     let container_name = env::var("POD_NAME").expect("No pod specified!");
     let cmd = env::var("CMD").expect("No command specified!");
 
-    info!("Command {}", cmd);
-
     env_logger::init();
-    let client = Client::try_default().await?;
-    let pods: Api<Pod> = Api::namespaced(client, &namespace);
 
-    let pod: Pod = pods.get(&container_name).await?;
-
-    if pod.name().is_empty() {
-        error!(
-            "No pod \"{}\" found in namespace \"{}\"!",
-            container_name,
-            namespace.clone()
-        );
-    } else {
-        match get_container_id(pod.clone()).await {
-            Ok(id) => {
-                let node = get_node(pod.clone()).await?;
-                deploy(&pods, node.clone()).await?;
-                execute(&pods, node.clone(), id.to_string(), cmd).await?;
+    match Client::try_default().await {
+        Ok(client) => {
+            let pods: Api<Pod> = Api::namespaced(client, &namespace);
+            match pods.get(&container_name).await {
+                Ok(pod) => match get_container_id(pod.clone()).await {
+                    Ok(id) => {
+                        let node = get_node(pod.clone()).await?;
+                        deploy(&pods, node.clone()).await?;
+                        execute(&pods, node.clone(), id.to_string(), cmd).await?;
+                    }
+                    Err(()) => {}
+                },
+                Err(_) => {
+                    error!(
+                        "No pod \"{}\" found in namespace \"{}\"!",
+                        container_name,
+                        namespace.clone()
+                    );
+                }
             }
-            Err(()) => {}
         }
+        Err(_) => error!("Could not connect to client!"),
     }
 
     Ok(())
@@ -84,13 +90,12 @@ async fn deploy(pods: &Api<Pod>, node: String) -> anyhow::Result<()> {
 
     let pod_name = format!("lambda-cntr-{}", node);
 
-    let p = pods.get(&pod_name).await;
-    match p {
+    match pods.get(&pod_name).await {
         Ok(_p) => info!("Lambda-Cntr-Pod already exist on {}, attaching ...", node),
         Err(_p) => {
-            // Stop on error including a pod already exists or is still being deleted.
             info!("Lambda-Cntr-Pod doesn't exist on {}, creating ...", node);
             pods.create(&PostParams::default(), &cntr_pod).await?;
+
             // Wait until the pod is running, otherwise we get 500 error.
             let lp = ListParams::default()
                 .fields(&format!("metadata.name={}", pod_name))
@@ -237,7 +242,6 @@ pub async fn get_container_id(pod: Pod) -> anyhow::Result<String, ()> {
             }
         }
     }
-
     Ok(container_id)
 }
 

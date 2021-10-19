@@ -111,6 +111,12 @@ fn main() {
                 .index(2),
         )
         .arg(
+            Arg::with_name("container_name")
+                .help("Specify the container in the target Pod")
+                .index(3)
+                .default_value(""),
+        )
+        .arg(
             Arg::with_name("namespace")
                 .help("Namespace of container")
                 .short("n")
