@@ -1,16 +1,42 @@
 use serde_json::json;
-use serde_json::Result;
 use std::env;
+use log::{error, info};
 
-pub fn get_json() -> Result<serde_json::Value> {
-  let image = env::var("CNTR_IMAGE").expect("No image specified!");
-  let path = env::var("SOCKET_PATH").expect("No path specified!");
-  let node = env::var("NODE").expect("No node specified!");
-  let container_engine = env::var("CONTAINER_ENGINE").expect("No engine specified!");
+pub fn get_json(image: String, socket: String, node: String, container_engine: String) -> anyhow::Result<serde_json::Value, ()> {
+
+  // If no image was defined, env is used, then default
+  let mut container_image = String::new();
+  if image.len() < 1 {
+    let image_env = env::var("CNTR_IMAGE");
+    if image_env.is_ok() {
+      container_image = image_env.unwrap();
+      info!("Using image: {}", image);
+    } else {
+      container_image =  String::from("onestone070/lambda-cntr:latest");
+      info!("No Image specified, using default: {}", container_image);
+    }
+  } else {
+    container_image = image;
+  }
+
+  // If no path was defined, env is used or error thrown
+  let mut container_socket = String::new();
+  if socket.len() < 1 {
+    let socket_env = env::var("SOCKET_PATH");
+    if socket_env.is_ok() {
+      container_socket = socket_env.unwrap();
+      info!("Using socket: {}", container_socket);
+    } else {
+      error!("Please pass the socket path or set the env variable 'SOCKET_PATH'");
+      return Err(());
+    }
+  } else {
+    container_socket = socket;
+  }
 
   let pod_name = format!("lambda-cntr-{}", node);
 
-  let mut mount_path = String::new();
+  let mut mount_path;
   match container_engine.as_str() {
     "docker" => {
       mount_path = String::from("/run/docker.sock");
@@ -34,11 +60,11 @@ pub fn get_json() -> Result<serde_json::Value> {
         "containers": [
           {
             "name": "lambda-cntr",
-            "image": image,
+            "image": container_image,
             "imagePullPolicy": "Always",
             "command": [
               "sleep",
-              "3600"
+              "360000"
             ],
             "securityContext": {
               "privileged": true,
@@ -62,7 +88,7 @@ pub fn get_json() -> Result<serde_json::Value> {
           {
             "name": "container-sock",
             "hostPath": {
-              "path": path,
+              "path": container_socket,
               "type": "Socket"
             }
           }
@@ -72,7 +98,11 @@ pub fn get_json() -> Result<serde_json::Value> {
             "kubernetes.io/hostname": node,
           }
       }
-  }))?;
+  }));
 
-  Ok(cntr_pod)
+  match cntr_pod {
+    Ok(cntr_pod) => return Ok(cntr_pod),
+    Err(_) => Err(())
+  }
+
 }

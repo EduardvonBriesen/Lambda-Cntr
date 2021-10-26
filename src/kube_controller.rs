@@ -10,26 +10,26 @@ use kube::{
 use std::env;
 use tokio::io::AsyncWriteExt;
 
-#[warn(dead_code)]
 fn main() {}
 
 #[tokio::main]
-#[warn(unused_must_use)]
-pub async fn deploy_and_attach() -> anyhow::Result<()> {
-    let namespace = env::var("NAMESPACE").expect("No namespace specified!");
-    let container_name = env::var("POD_NAME").expect("No pod specified!");
-
+pub async fn deploy_and_attach(
+    pod_name: String,
+    container_name: String,
+    namespace: String,
+    image: String,
+    socket: String,
+) -> anyhow::Result<()> {
     env_logger::init();
-    
     match Client::try_default().await {
         Ok(client) => {
             let pods: Api<Pod> = Api::namespaced(client.clone(), &namespace);
-            match pods.get(&container_name).await {
-                Ok(pod) => match get_container_id(pod.clone()).await {
+            match pods.get(&pod_name).await {
+                Ok(pod) => match get_container_id(pod.clone(), container_name).await {
                     Ok(id) => {
                         let node = get_node(pod.clone()).await?;
-                        deploy(&pods, node.clone()).await?;
-                        attach(&pods, node.clone(), id.to_string()).await?;
+                        deploy(&pods, node.clone(), image, socket, id.1).await?;
+                        attach(&pods, node.clone(), id.0.to_string()).await?;
                         delete(&pods, node.clone()).await?;
                     }
                     Err(()) => {}
@@ -37,7 +37,7 @@ pub async fn deploy_and_attach() -> anyhow::Result<()> {
                 Err(_) => {
                     error!(
                         "No pod \"{}\" found in namespace \"{}\"!",
-                        container_name,
+                        pod_name,
                         namespace.clone()
                     );
                 }
@@ -50,29 +50,32 @@ pub async fn deploy_and_attach() -> anyhow::Result<()> {
 }
 
 #[tokio::main]
-pub async fn deploy_and_execute() -> anyhow::Result<()> {
-    let namespace = env::var("NAMESPACE").expect("No namespace specified!");
-    let container_name = env::var("POD_NAME").expect("No pod specified!");
-    let cmd = env::var("CMD").expect("No command specified!");
-
+pub async fn deploy_and_execute(
+    pod_name: String,
+    container_name: String,
+    namespace: String,
+    cmd: String,
+    image: String,
+    socket: String,
+) -> anyhow::Result<()> {
     env_logger::init();
 
     match Client::try_default().await {
         Ok(client) => {
-            let pods: Api<Pod> = Api::namespaced(client, &namespace);
-            match pods.get(&container_name).await {
-                Ok(pod) => match get_container_id(pod.clone()).await {
+            let pods: Api<Pod> = Api::namespaced(client.clone(), &namespace);
+            match pods.get(&pod_name).await {
+                Ok(pod) => match get_container_id(pod.clone(), container_name).await {
                     Ok(id) => {
                         let node = get_node(pod.clone()).await?;
-                        deploy(&pods, node.clone()).await?;
-                        execute(&pods, node.clone(), id.to_string(), cmd).await?;
+                        deploy(&pods, node.clone(), image, socket, id.1).await?;
+                        execute(&pods, node.clone(), id.0.to_string(), cmd).await?;
                     }
                     Err(()) => {}
                 },
                 Err(_) => {
                     error!(
                         "No pod \"{}\" found in namespace \"{}\"!",
-                        container_name,
+                        pod_name,
                         namespace.clone()
                     );
                 }
@@ -84,40 +87,54 @@ pub async fn deploy_and_execute() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn deploy(pods: &Api<Pod>, node: String) -> anyhow::Result<()> {
-    let cntr_pod = json_builder::get_json().expect("Unable to parse json");
-    let cntr_pod = serde_json::from_value(cntr_pod).expect("Unable to parse json");
+async fn deploy(
+    pods: &Api<Pod>,
+    node: String,
+    image: String,
+    socket: String,
+    container_engine: String,
+) -> anyhow::Result<()> {
+    match json_builder::get_json(image, socket, node.clone(), container_engine) {
+        Ok(pod_json) => {
+            println!("{}", pod_json);
+            let pod_name = format!("lambda-cntr-{}", node);
 
-    let pod_name = format!("lambda-cntr-{}", node);
-
-    match pods.get(&pod_name).await {
-        Ok(_p) => info!("Lambda-Cntr-Pod already exist on {}, attaching ...", node),
-        Err(_p) => {
-            info!("Lambda-Cntr-Pod doesn't exist on {}, creating ...", node);
-            pods.create(&PostParams::default(), &cntr_pod).await?;
-
-            // Wait until the pod is running, otherwise we get 500 error.
-            let lp = ListParams::default()
-                .fields(&format!("metadata.name={}", pod_name))
-                .timeout(60);
-            let mut stream = pods.watch(&lp, "0").await?.boxed();
-            while let Some(status) = stream.try_next().await? {
-                match status {
-                    WatchEvent::Added(o) => {
-                        info!("Added {}", o.name());
+            match pods.get(&pod_name).await {
+                Ok(_p) => info!("Lambda-Cntr-Pod already exist on {}, attaching ...", node),
+                Err(_p) => {
+                    info!("Lambda-Cntr-Pod doesn't exist on {}, creating ...", node);
+                    
+                    let pod = serde_json::from_value(pod_json).expect("");
+                    match pods.create(&PostParams::default(), &pod).await  {
+                        Ok(_) => info!("Successfully created Pod!"),
+                        Err(err) => error!("{}", err)
                     }
-                    WatchEvent::Modified(o) => {
-                        let s = o.status.as_ref().expect("status exists on pod");
-                        if s.phase.clone().unwrap_or_default() == "Running" {
-                            info!("Ready to attach to {}", o.name());
-                            break;
+
+                    // Wait until the pod is running, otherwise we get 500 error.
+                    let lp = ListParams::default()
+                        .fields(&format!("metadata.name={}", pod_name))
+                        .timeout(60);
+                    let mut stream = pods.watch(&lp, "0").await?.boxed();
+                    while let Some(status) = stream.try_next().await? {
+                        match status {
+                            WatchEvent::Added(o) => {
+                                info!("Added {}", o.name());
+                            }
+                            WatchEvent::Modified(o) => {
+                                let s = o.status.as_ref().expect("status exists on pod");
+                                if s.phase.clone().unwrap_or_default() == "Running" {
+                                    info!("Ready to attach to {}", o.name());
+                                    break;
+                                }
+                            }
+                            _ => {}
                         }
                     }
-                    _ => {}
                 }
-            }
+            };
         }
-    };
+        Err(_) => error!("Unable to compile Json manifest!"),
+    }
 
     Ok(())
 }
@@ -197,9 +214,12 @@ async fn delete(pods: &Api<Pod>, node: String) -> anyhow::Result<()> {
 }
 
 // Returns container_id of pod and sets container engine env.
-pub async fn get_container_id(pod: Pod) -> anyhow::Result<String, ()> {
-    let container_name = env::var("CONTAINER_NAME").expect("No container name specified!");
+pub async fn get_container_id(
+    pod: Pod,
+    container_name: String,
+) -> anyhow::Result<(String, String), ()> {
     let mut container_id = String::new();
+    let mut container_runtime = String::new();
 
     if let Some(p_status) = pod.clone().status {
         if let Some(c_status) = p_status.container_statuses {
@@ -209,7 +229,7 @@ pub async fn get_container_id(pod: Pod) -> anyhow::Result<String, ()> {
                         let id = c_id.clone();
                         let v: Vec<&str> = id.split("://").collect();
                         container_id = v[1].to_string();
-                        env::set_var("CONTAINER_ENGINE", v[0].to_string());
+                        container_runtime = v[0].to_string();
                     }
                 }
             } else {
@@ -226,7 +246,7 @@ pub async fn get_container_id(pod: Pod) -> anyhow::Result<String, ()> {
                             let id = c_id.clone();
                             let v: Vec<&str> = id.split("://").collect();
                             container_id = v[1].to_string();
-                            env::set_var("CONTAINER_ENGINE", v[0].to_string());
+                            container_runtime = v[0].to_string();
                             break;
                         }
                     }
@@ -242,7 +262,7 @@ pub async fn get_container_id(pod: Pod) -> anyhow::Result<String, ()> {
             }
         }
     }
-    Ok(container_id)
+    Ok((container_id, container_runtime))
 }
 
 pub async fn get_node(pod: Pod) -> anyhow::Result<String> {

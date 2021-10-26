@@ -7,41 +7,41 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use std::env;
 
 fn attach(args: &ArgMatches) {
-    env::set_var("POD_NAME", args.value_of("pod_name").unwrap().to_string());
-    env::set_var(
-        "CONTAINER_NAME",
-        args.value_of("container_name").unwrap().to_string(),
-    );
-    env::set_var("NAMESPACE", args.value_of("namespace").unwrap().to_string());
+    let pod_name = args.value_of("pod_name").unwrap().to_string();
+    let container_name = args.value_of("container_name").unwrap().to_string();
+    let namespace = args.value_of("namespace").unwrap().to_string();
+    let image = args.value_of("image").unwrap().to_string();
+    let socket = args.value_of("socket-path").unwrap().to_string();
+
     env::set_var("RUST_LOG", args.value_of("log-level").unwrap().to_string());
-    env::set_var("CNTR_IMAGE", args.value_of("image").unwrap().to_string());
-    env::set_var(
-        "SOCKET_PATH",
-        args.value_of("socket-path").unwrap().to_string(),
+
+    lambda_cntr::kube_controller::deploy_and_attach(
+        pod_name,
+        container_name,
+        namespace,
+        image,
+        socket,
     );
-    lambda_cntr::kube_controller::deploy_and_attach();
 }
 
 fn execute(args: &ArgMatches) {
-    env::set_var("POD_NAME", args.value_of("pod_name").unwrap().to_string());
-    env::set_var(
-        "CONTAINER_NAME",
-        args.value_of("container_name").unwrap().to_string(),
-    );
-    env::set_var("CMD", args.value_of("command").unwrap().to_string());
-    env::set_var("NAMESPACE", args.value_of("namespace").unwrap().to_string());
+    let pod_name = args.value_of("pod_name").unwrap().to_string();
+    let container_name = args.value_of("container_name").unwrap().to_string();
+    let namespace = args.value_of("namespace").unwrap().to_string();
+    let cmd = args.value_of("command").unwrap().to_string();
+    let image = args.value_of("image").unwrap().to_string();
+    let socket = args.value_of("socket-path").unwrap().to_string();
+
     env::set_var("RUST_LOG", args.value_of("log-level").unwrap().to_string());
-    env::set_var("CNTR_IMAGE", args.value_of("image").unwrap().to_string());
-    env::set_var(
-        "SOCKET_PATH",
-        args.value_of("socket-path").unwrap().to_string(),
+
+    lambda_cntr::kube_controller::deploy_and_execute(
+        pod_name,
+        container_name,
+        namespace,
+        cmd,
+        image,
+        socket,
     );
-    if args.is_present("docker") {
-        env::set_var("MOUNT_PATH", "/run/docker/docker.sock");
-    } else {
-        env::set_var("MOUNT_PATH", "/run/containerd/containerd.sock");
-    }
-    lambda_cntr::kube_controller::deploy_and_execute();
 }
 
 fn main() {
@@ -83,15 +83,15 @@ fn main() {
                 .short("i")
                 .long("image")
                 .takes_value(true)
-                .default_value("onestone070/lambda-cntr"),
+                .default_value(""),
         )
         .arg(
             Arg::with_name("socket-path")
-                .help("Path to the socket of the container engine on your node (e.g. \"/run/k3s/containerd/containerd.sock\")")
+                .help("Path to the socket of the container engine on your node (e.g. \"/run/containerd/containerd.sock\")")
                 .short("s")
                 .long("socket-path")
                 .takes_value(true)
-                .required(true),
+                .default_value(""),
         );
 
     let execute_command = SubCommand::with_name("execute")
@@ -138,15 +138,15 @@ fn main() {
                 .short("i")
                 .long("image")
                 .takes_value(true)
-                .default_value("onestone070/lambda-cntr"),
+                .default_value(""),
         )
         .arg(
             Arg::with_name("socket-path")
-                .help("Path to the socket of the container engine on your node (e.g. \"/run/k3s/containerd/containerd.sock\")")
+                .help("Path to the socket of the container engine on your node (e.g. \"/run/containerd/containerd.sock\")")
                 .short("s")
                 .long("socket-path")
                 .takes_value(true)
-                .required(true),
+                .default_value(""),
         );
 
     let matches = App::new("\u{03bb}-Cntr")
