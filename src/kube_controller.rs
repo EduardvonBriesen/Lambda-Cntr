@@ -10,6 +10,7 @@ use kube::{
 use std::env;
 use tokio::io::AsyncWriteExt;
 
+#[allow(dead_code)]
 fn main() {}
 
 #[tokio::main]
