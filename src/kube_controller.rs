@@ -97,7 +97,6 @@ async fn deploy(
 ) -> anyhow::Result<()> {
     match json_builder::get_json(image, socket, node.clone(), container_engine) {
         Ok(pod_json) => {
-            println!("{}", pod_json);
             let pod_name = format!("lambda-cntr-{}", node);
 
             match pods.get(&pod_name).await {

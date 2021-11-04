@@ -16,7 +16,7 @@ fn attach(args: &ArgMatches) {
     let image = args.value_of("image").unwrap().to_string();
     let socket = args.value_of("socket-path").unwrap().to_string();
 
-    env::set_var("RUST_LOG", args.value_of("log-level").unwrap().to_string());
+    env::set_var("RUST_LOG", "info");
 
     match lambda_cntr::kube_controller::deploy_and_attach(
         pod_name,
@@ -41,7 +41,7 @@ fn execute(args: &ArgMatches) {
     let image = args.value_of("image").unwrap().to_string();
     let socket = args.value_of("socket-path").unwrap().to_string();
 
-    env::set_var("RUST_LOG", args.value_of("log-level").unwrap().to_string());
+    env::set_var("RUST_LOG", "info");
 
     match lambda_cntr::kube_controller::deploy_and_execute(
         pod_name,
