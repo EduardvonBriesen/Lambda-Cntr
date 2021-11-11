@@ -7,44 +7,58 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use std::env;
 
 fn attach(args: &ArgMatches) {
-    env::set_var(
-        "CONTAINER_ID",
-        args.value_of("pod_name").unwrap().to_string(),
-    );
-    env::set_var("NAMESPACE", args.value_of("namespace").unwrap().to_string());
-    env::set_var("RUST_LOG", args.value_of("log-level").unwrap().to_string());
-    env::set_var("CNTR_IMAGE", args.value_of("image").unwrap().to_string());
-    env::set_var(
-        "SOCKET_PATH",
-        args.value_of("socket-path").unwrap().to_string(),
-    );
-    lambda_cntr::kube_controller::deploy_and_attach();
+    let pod_name = args.value_of("pod_name").unwrap().to_string();
+    let mut container_name = "".to_string();
+    if args.is_present("container_name") {
+        container_name = args.value_of("container_name").unwrap().to_string();
+    }
+    let namespace = args.value_of("namespace").unwrap().to_string();
+    let image = args.value_of("image").unwrap().to_string();
+    let socket = args.value_of("socket-path").unwrap().to_string();
+
+    env::set_var("RUST_LOG", "info");
+
+    match lambda_cntr::kube_controller::deploy_and_attach(
+        pod_name,
+        container_name,
+        namespace,
+        image,
+        socket,
+    ) {
+        Ok(_) => (),
+        Err(e) => eprintln!("{}", e),
+    }
 }
 
 fn execute(args: &ArgMatches) {
-    env::set_var(
-        "CONTAINER_ID",
-        args.value_of("pod_name").unwrap().to_string(),
-    );
-    env::set_var("CMD", args.value_of("command").unwrap().to_string());
-    env::set_var("NAMESPACE", args.value_of("namespace").unwrap().to_string());
-    env::set_var("RUST_LOG", args.value_of("log-level").unwrap().to_string());
-    env::set_var("CNTR_IMAGE", args.value_of("image").unwrap().to_string());
-    env::set_var(
-        "SOCKET_PATH",
-        args.value_of("socket-path").unwrap().to_string(),
-    );
-    if args.is_present("docker") {
-        env::set_var("MOUNT_PATH", "/run/docker/docker.sock");
-    } else {
-        env::set_var("MOUNT_PATH", "/run/containerd/containerd.sock");
+    let pod_name = args.value_of("pod_name").unwrap().to_string();
+    let mut container_name = "".to_string();
+    if args.is_present("container_name") {
+        container_name = args.value_of("container_name").unwrap().to_string();
     }
-    lambda_cntr::kube_controller::deploy_and_execute();
+    let namespace = args.value_of("namespace").unwrap().to_string();
+    let cmd = args.value_of("command").unwrap().to_string();
+    let image = args.value_of("image").unwrap().to_string();
+    let socket = args.value_of("socket-path").unwrap().to_string();
+
+    env::set_var("RUST_LOG", "info");
+
+    match lambda_cntr::kube_controller::deploy_and_execute(
+        pod_name,
+        container_name,
+        namespace,
+        cmd,
+        image,
+        socket,
+    ) {
+        Ok(_) => (),
+        Err(e) => eprintln!("{}", e),
+    }
 }
 
 fn main() {
     let attach_command = SubCommand::with_name("attach")
-        .about("Attach Cntr-Pod to Container in Kubeneretes")
+        .about("Attach \u{03bb}-Cntr-Pod to Container in Kubernetes")
         .version(crate_version!())
         .author(crate_authors!("\n"))
         .arg(
@@ -54,36 +68,35 @@ fn main() {
                 .index(1),
         )
         .arg(
+            Arg::with_name("container_name")
+                .help("Specify the container in the target Pod")
+                .index(2),
+        )
+        .arg(
             Arg::with_name("namespace")
-                .help("Namespace of container")
+                .help("Specify th namespace of the target Pod")
                 .short("n")
                 .long("namespace")
                 .takes_value(true)
                 .default_value("default"),
         )
         .arg(
-            Arg::with_name("log-level")
-                .help("Set the logging level (e.g. \"info,kube=debug\")")
-                .short("l")
-                .long("log-level")
-                .takes_value(true)
-                .default_value("info"),
-        )
-        .arg(
             Arg::with_name("image")
                 .help("Set your container image")
                 .short("i")
                 .long("image")
+                .env("CNTR_IMAGE")
                 .takes_value(true)
-                .default_value("onestone070/lambda-cntr"),
+                .default_value("onestone070/lambda-cntr:latest"),
         )
         .arg(
             Arg::with_name("socket-path")
-                .help("Path to the socket of the container engine on your node (e.g. \"/run/k3s/containerd/containerd.sock\")")
+                .help("Path to the socket of the container engine on your node")
                 .short("s")
                 .long("socket-path")
+                .env("SOCKET_PATH")
                 .takes_value(true)
-                .required(true),
+                .default_value("/run/containerd/containerd.sock"),
         );
 
     let execute_command = SubCommand::with_name("execute")
@@ -103,6 +116,12 @@ fn main() {
                 .index(2),
         )
         .arg(
+            Arg::with_name("container_name")
+                .help("Specify the container in the target Pod")
+                .index(3)
+                .default_value(""),
+        )
+        .arg(
             Arg::with_name("namespace")
                 .help("Namespace of container")
                 .short("n")
@@ -111,28 +130,22 @@ fn main() {
                 .default_value("default"),
         )
         .arg(
-            Arg::with_name("log-level")
-                .help("Set the logging level (e.g. \"info,kube=debug\")")
-                .short("l")
-                .long("log-level")
-                .takes_value(true)
-                .default_value("info"),
-        )
-        .arg(
             Arg::with_name("image")
                 .help("Set your container image")
                 .short("i")
                 .long("image")
+                .env("CNTR_IMAGE")
                 .takes_value(true)
-                .default_value("onestone070/lambda-cntr"),
+                .default_value("onestone070/lambda-cntr:latest"),
         )
         .arg(
             Arg::with_name("socket-path")
-                .help("Path to the socket of the container engine on your node (e.g. \"/run/k3s/containerd/containerd.sock\")")
+                .help("Path to the socket of the container engine on your node")
                 .short("s")
                 .long("socket-path")
+                .env("SOCKET_PATH")
                 .takes_value(true)
-                .required(true),
+                .default_value("/run/containerd/containerd.sock"),
         );
 
     let matches = App::new("\u{03bb}-Cntr")

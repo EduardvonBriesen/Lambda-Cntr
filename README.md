@@ -11,28 +11,28 @@ It is an extension of [Cntr](https://github.com/Mic92/cntr), enabeling its use i
 $ lambda-cntr attach --help
 lambda-cntr-attach 0.1.0
 Eduard von Briesen <e.v.briesen@gmail.com>
-Attach Cntr-Pod to Container in Kubeneretes
+Attach Cntr-Pod to Container in Kubernetes
 
 USAGE:
-    lambda-cntr attach [FLAGS] [OPTIONS] <pod_name> --socket-path <socket-path>
+    lambda-cntr attach [OPTIONS] <pod_name> [container_name]
 
 FLAGS:
-    -d, --docker     Set if Docker is used as container engine [default: containerd]
     -h, --help       Prints help information
     -V, --version    Prints version information
 
 OPTIONS:
-    -i, --image <image>                Set your container image [default: onestone070/cntr]
-    -l, --log-level <log-level>        Set the logging level (e.g. "info,kube=debug") [default: info]
-    -n, --namespace <namespace>        Namespace of container [default: default]
-    -s, --socket-path <socket-path>    Path to the socket of the container engine on your node (e.g.
-                                       "/run/k3s/containerd/containerd.sock")
+    -i, --image <image>                Set your container image [env: CNTR_IMAGE=]  [default: onestone070/lambda-
+                                       cntr:latest]
+    -n, --namespace <namespace>        Specify th namespace of the target Pod [default: default]
+    -s, --socket-path <socket-path>    Path to the socket of the container engine on your node [env: SOCKET_PATH=]
+                                       [default: /run/containerd/containerd.sock]
 
 ARGS:
-    <pod_name>    Pod Name
+    <pod_name>          Pod Name
+    <container_name>    Specify the container in the target Pod
 ```
 
-To make full use λ-Cntr build your own [Dockerfile](https://github.com/EduardvonBriesen/Lambda-Cntr/blob/main/Dockerfile) to including your development tools and adjust [cntr.yaml](https://github.com/EduardvonBriesen/Lambda-Cntr/blob/main/cntr.yaml) to refer to your image.
+To make full use λ-Cntr build your own [Dockerfile](https://github.com/EduardvonBriesen/Lambda-Cntr/blob/main/Dockerfile) to including your development tools.
 
 ## Caveats 
 

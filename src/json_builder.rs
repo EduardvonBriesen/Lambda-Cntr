@@ -1,16 +1,14 @@
 use serde_json::json;
-use serde_json::Result;
-use std::env;
 
-pub fn get_json() -> Result<serde_json::Value> {
-  let image = env::var("CNTR_IMAGE").expect("No image specified!");
-  let path = env::var("SOCKET_PATH").expect("No path specified!");
-  let node = env::var("NODE").expect("No node specified!");
-  let container_engine = env::var("CONTAINER_ENGINE").expect("No engine specified!");
-
+pub fn get_json(
+  image: String,
+  socket: String,
+  node: String,
+  container_engine: String,
+) -> anyhow::Result<serde_json::Value, ()> {
   let pod_name = format!("lambda-cntr-{}", node);
 
-  let mut mount_path = String::new();
+  let mount_path;
   match container_engine.as_str() {
     "docker" => {
       mount_path = String::from("/run/docker.sock");
@@ -38,7 +36,7 @@ pub fn get_json() -> Result<serde_json::Value> {
             "imagePullPolicy": "Always",
             "command": [
               "sleep",
-              "3600"
+              "360000"
             ],
             "securityContext": {
               "privileged": true,
@@ -62,7 +60,7 @@ pub fn get_json() -> Result<serde_json::Value> {
           {
             "name": "container-sock",
             "hostPath": {
-              "path": path,
+              "path": socket,
               "type": "Socket"
             }
           }
@@ -72,7 +70,10 @@ pub fn get_json() -> Result<serde_json::Value> {
             "kubernetes.io/hostname": node,
           }
       }
-  }))?;
+  }));
 
-  Ok(cntr_pod)
+  match cntr_pod {
+    Ok(cntr_pod) => return Ok(cntr_pod),
+    Err(_) => Err(()),
+  }
 }
