@@ -58,7 +58,7 @@ fn execute(args: &ArgMatches) {
 
 fn main() {
     let attach_command = SubCommand::with_name("attach")
-        .about("Attach Cntr-Pod to Container in Kubernetes")
+        .about("Attach \u{03bb}-Cntr-Pod to Container in Kubernetes")
         .version(crate_version!())
         .author(crate_authors!("\n"))
         .arg(
